@@ -1,0 +1,5 @@
+venv/          # 排除本地虚拟环境（容器内会重新装依赖）
+logs/          # 排除日志目录
+__pycache__/   # 排除编译缓存
+*.pid          # 排除进程文件（如uwsgi.pid）
+celerybeat-schedule  # 排除celery调度文件

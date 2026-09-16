@@ -1,0 +1,5 @@
+# ============================================
+# 本地开发用 - Windows
+# 使用: uv pip install -r requirements/local.txt
+# ============================================
+-r requirements/local.txt

@@ -1,0 +1,14 @@
+● muxi_shop_uwsgi.service - muxi_shop uwsgi
+   Loaded: loaded (/etc/systemd/system/muxi_shop_uwsgi.service; enabled; vendor preset: disabled)
+   Active: inactive (dead) since Mon 2025-10-13 13:48:12 CST; 10ms ago
+  Process: 22153 ExecStop=/bin/kill -s INT $MAINPID (code=exited, status=0/SUCCESS)
+  Process: 22059 ExecStart=/www/wwwroot/muxi_django/venv/bin/uwsgi --ini uwsgi.ini (code=exited, status=0/SUCCESS)
+ Main PID: 22061 (code=exited, status=0/SUCCESS)
+
+Oct 13 13:39:39 iZ7xv2crk07q0nytahottcZ systemd[1]: Starting muxi_shop uwsgi...
+Oct 13 13:39:39 iZ7xv2crk07q0nytahottcZ uwsgi[22059]: [uWSGI] getting INI configuration from uwsgi.ini
+Oct 13 13:39:39 iZ7xv2crk07q0nytahottcZ systemd[1]: muxi_shop_uwsgi.service: Can't open PID file /www/wwwroot/muxi_django/uwsgi.pid (yet?) after start: No such file or directory
+Oct 13 13:39:39 iZ7xv2crk07q0nytahottcZ systemd[1]: Started muxi_shop uwsgi.
+Oct 13 13:48:12 iZ7xv2crk07q0nytahottcZ systemd[1]: Stopping muxi_shop uwsgi...
+Oct 13 13:48:12 iZ7xv2crk07q0nytahottcZ systemd[1]: muxi_shop_uwsgi.service: Succeeded.
+Oct 13 13:48:12 iZ7xv2crk07q0nytahottcZ systemd[1]: Stopped muxi_shop uwsgi.

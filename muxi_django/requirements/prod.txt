@@ -1,0 +1,18 @@
+# ============================================
+# Production - 生产服务器用（完整版）
+# ============================================
+-r base.txt
+
+# 需要编译的包（仅 Linux 服务器需要）
+gevent==25.5.1
+geventhttpclient==2.3.4
+hiredis==3.2.1
+uWSGI==2.0.31
+Brotli==1.1.0
+greenlet==3.2.4
+
+# 数据库（Linux 服务器用 mysqlclient）
+mysqlclient==2.2.7
+
+# PostgreSQL（如果用 Postgres）
+psycopg2-binary==2.9.11

@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>核心数据分析仪表盘</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+    <style>
+        .chart-box {
+            width: 100%;
+            height: 450px;
+            margin: 20px 0;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .time-filter {
+            margin: 30px 0;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1 class="text-center mt-5 mb-4">销售&订单状态核心分析</h1>
+
+    <div class="time-filter text-center">
+        <button class="btn btn-secondary mx-2" data-range="1d">今日</button>
+        <button class="btn btn-primary mx-2" data-range="7d">近7天</button>
+        <button class="btn btn-secondary mx-2" data-range="30d">近30天</button>
+    </div>
+
+    <!-- 销售趋势图 -->
+    <div class="row">
+        <div class="col-12">
+            <h3>销售趋势分析</h3>
+            <div id="sales-chart" class="chart-box"></div>
+        </div>
+    </div>
+
+    <!-- 订单状态分析 -->
+    <div class="row">
+        <div class="col-6">
+            <h3>订单状态占比</h3>
+            <div id="order-status-pie" class="chart-box"></div>
+        </div>
+        <div class="col-6">
+            <h3>订单状态趋势</h3>
+            <div id="order-status-trend" class="chart-box"></div>
+        </div>
+    </div>
+
+    <!-- 秒杀订单转化分析 -->
+    <div class="row mt-5">
+        <div class="col-12">
+            <h2 id="seckill-title">秒杀订单支付转化分析（近7天）</h2>
+        </div>
+        <div class="col-12">
+            <h3>转化漏斗（核心指标）</h3>
+            <div id="seckill-funnel" class="chart-box"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 初始化所有图表实例
+const salesChart = echarts.init(document.getElementById('sales-chart'));
+const orderStatusPie = echarts.init(document.getElementById('order-status-pie'));
+const orderStatusTrend = echarts.init(document.getElementById('order-status-trend'));
+const seckillFunnel = echarts.init(document.getElementById('seckill-funnel'));
+
+// -------------------------- 核心工具函数（解决数据格式+汇总问题）--------------------------
+// 处理带千分位的字符串（如 "157,146.98"）→ 数字
+function parseNumber(num) {
+    if (num === null || num === undefined) return 0;
+    if (typeof num === 'string') {
+        // 去除千分位逗号，再转数字
+        return Number(num.replace(/,/g, '')) || 0;
+    }
+    return Number(num) || 0;
+}
+
+// 保留两位小数
+function toFixed2(num) {
+    return parseNumber(num).toFixed(2);
+}
+
+// 汇总数组总和（用于计算总订单/总销售额）
+function sumArray(arr) {
+    if (!Array.isArray(arr)) return 0;
+    return arr.reduce((total, item) => total + parseNumber(item), 0);
+}
+
+// -------------------------- 禁止接口缓存（解决旧数据问题）--------------------------
+function fetchNoCache(url) {
+    // 添加时间戳，禁止浏览器缓存
+    const timestamp = new Date().getTime();
+    const urlWithNoCache = url.includes('?') ? `${url}&t=${timestamp}` : `${url}?t=${timestamp}`;
+    return fetch(urlWithNoCache);
+}
+
+// -------------------------- 时间范围切换 --------------------------
+document.querySelectorAll('.time-filter button').forEach(btn => {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('.time-filter button').forEach(b => b.classList.remove('btn-primary'));
+        this.classList.add('btn-primary');
+        const timeRange = this.getAttribute('data-range');
+        loadSalesData(timeRange);
+        loadOrderStatusData(timeRange);
+        loadSeckillData(timeRange);
+        const timeText = timeRange === '1d' ? '今日' : timeRange === '7d' ? '近7天' : '近30天';
+        document.getElementById('seckill-title').textContent = `秒杀订单支付转化分析（${timeText}）`;
+    });
+});
+
+// -------------------------- 销售数据加载（终极方案：不依赖接口总字段，直接汇总每日数据）--------------------------
+function loadSalesData(timeRange = '7d') {
+    // 显示加载状态
+    salesChart.setOption({
+        title: { text: '加载中...', left: 'center' },
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['订单量', '销售额（元）'], top: 30 },
+        xAxis: { type: 'category', data: [], axisLabel: { rotate: 30 } },
+        yAxis: [
+            { type: 'value', name: '订单量', min: 0 },
+            { type: 'value', name: '销售额', min: 0, position: 'right' }
+        ],
+        series: []
+    });
+
+    // 使用禁止缓存的请求
+    fetchNoCache(`/analytics/api/sales/?time_range=${timeRange}`)
+        .then(res => {
+            if (!res.ok) throw new Error(`接口请求失败（状态码：${res.status}）`);
+            return res.json();
+        })
+        .then(data => {
+            // 打印接口返回数据（让你能看到真实结构，方便调试）
+            console.log(`【${timeRange}接口返回数据】`, data);
+
+            // 核心：从每日数据汇总总数据（彻底不依赖接口的total_sales/total_orders）
+            const dailyOrderCounts = (data.order_counts || []).map(item => parseNumber(item)); // 每日订单数组
+            const dailySalesAmounts = (data.sales_amounts || []).map(item => parseNumber(item)); // 每日销售额数组
+            const totalOrders = sumArray(dailyOrderCounts); // 总订单 = 每日订单求和
+            const totalSales = sumArray(dailySalesAmounts); // 总销售额 = 每日销售额求和
+            const avgOrderPrice = totalOrders > 0 ? (totalSales / totalOrders) : 0; // 客单价 = 总销售额/总订单
+
+            // 格式化显示
+            const totalSalesFormatted = toFixed2(totalSales);
+            const totalOrdersFormatted = Math.round(totalOrders); // 订单量取整
+            const avgOrderPriceFormatted = toFixed2(avgOrderPrice);
+
+            let option;
+            if (totalOrders === 0 && totalSales === 0) {
+                const timeText = timeRange === '1d' ? '今日' : timeRange === '7d' ? '近7天' : '近30天';
+                option = {
+                    title: { text: `暂无${timeText}销售数据`, left: 'center' },
+                    tooltip: { trigger: 'axis' },
+                    legend: { data: ['订单量', '销售额（元）'], top: 30 },
+                    xAxis: { type: 'category', data: data.dates || [], axisLabel: { rotate: 30 } },
+                    yAxis: [
+                        { type: 'value', name: '订单量', min: 0 },
+                        { type: 'value', name: '销售额', min: 0, position: 'right' }
+                    ],
+                    series: []
+                };
+            } else {
+                option = {
+                    title: {
+                        text: `销售额&订单量趋势（总销售额：${totalSalesFormatted}元 | 总订单：${totalOrdersFormatted}单 | 客单价：${avgOrderPriceFormatted}元）`,
+                        left: 'center'
+                    },
+                    tooltip: { 
+                        trigger: 'axis',
+                        formatter: function(params) {
+                            //  tooltip显示格式化（去除千分位）
+                            return params.map(p => `${p.seriesName}：${p.seriesName.includes('销售额') ? toFixed2(p.value) + '元' : Math.round(p.value) + '单'}`).join('<br>');
+                        }
+                    },
+                    legend: { data: ['订单量', '销售额（元）'], top: 30 },
+                    xAxis: { type: 'category', data: data.dates || [], axisLabel: { rotate: 30 } },
+                    yAxis: [
+                        { type: 'value', name: '订单量', min: 0 },
+                        { type: 'value', name: '销售额', min: 0, position: 'right' }
+                    ],
+                    series: [
+                        { name: '订单量', type: 'bar', yAxisIndex: 0, data: dailyOrderCounts, itemStyle: { color: '#4299e1' } },
+                        { name: '销售额（元）', type: 'line', yAxisIndex: 1, data: dailySalesAmounts, itemStyle: { color: '#e53e3e' }, lineStyle: { width: 3 }, symbol: 'circle', symbolSize: 6 }
+                    ]
+                };
+            }
+            salesChart.setOption(option);
+        })
+        .catch(err => {
+            console.error('销售数据加载失败：', err);
+            salesChart.setOption({
+                title: { text: '数据加载失败，请刷新重试', left: 'center', textStyle: { color: '#e53e3e' } },
+                tooltip: { trigger: 'axis' },
+                legend: { data: ['订单量', '销售额（元）'], top: 30 },
+                xAxis: { type: 'category', data: [], axisLabel: { rotate: 30 } },
+                yAxis: [
+                    { type: 'value', name: '订单量', min: 0 },
+                    { type: 'value', name: '销售额', min: 0, position: 'right' }
+                ],
+                series: []
+            });
+        });
+}
+
+// -------------------------- 订单状态数据加载（同步优化）--------------------------
+function loadOrderStatusData(timeRange = '7d') {
+    orderStatusPie.setOption({
+        title: { text: '加载中...', left: 'center' },
+        tooltip: { trigger: 'item' },
+        legend: { data: [], orient: 'vertical', left: 10 },
+        series: [{ type: 'pie', radius: ['40%', '70%'], data: [] }]
+    });
+    orderStatusTrend.setOption({
+        title: { text: '加载中...', left: 'center' },
+        tooltip: { trigger: 'axis' },
+        legend: { data: [], top: 30 },
+        xAxis: { type: 'category', data: [] },
+        yAxis: { type: 'value', min: 0 },
+        series: []
+    });
+
+    fetchNoCache(`/analytics/api/order-status/?time_range=${timeRange}`)
+        .then(res => {
+            if (!res.ok) throw new Error('接口请求失败');
+            return res.json();
+        })
+        .then(data => {
+            const timeText = timeRange === '1d' ? '今日' : timeRange === '7d' ? '近7天' : '近30天';
+            // 饼图
+            const pieOption = {
+                title: { text: `各状态订单占比（${timeText}）`, left: 'center' },
+                tooltip: { trigger: 'item' },
+                legend: { data: data.status_distribution?.labels || [], orient: 'vertical', left: 10 },
+                series: [{
+                    name: '订单数量',
+                    type: 'pie',
+                    radius: ['40%', '70%'],
+                    data: data.status_distribution?.labels?.map((label, i) => ({ 
+                        name: label, 
+                        value: parseNumber(data.status_distribution.counts[i] || 0) 
+                    })) || []
+                }]
+            };
+            orderStatusPie.setOption(pieOption);
+
+            // 折线图
+            let trendOption;
+            if (!data.status_trend?.dates || data.status_trend.dates.length === 0) {
+                trendOption = {
+                    title: { text: `暂无${timeText}订单状态趋势数据`, left: 'center' },
+                    tooltip: { trigger: 'axis' },
+                    legend: { data: [], top: 30 },
+                    xAxis: { type: 'category', data: [] },
+                    yAxis: { type: 'value', min: 0 },
+                    series: []
+                };
+            } else {
+                trendOption = {
+                    title: { text: `各状态订单趋势（${timeText}）`, left: 'center' },
+                    tooltip: { trigger: 'axis' },
+                    legend: { data: data.status_trend?.series?.map(item => item.name) || [], top: 30 },
+                    xAxis: { type: 'category', data: data.status_trend?.dates || [] },
+                    yAxis: { type: 'value', min: 0 },
+                    series: data.status_trend?.series?.map(item => ({
+                        name: item.name, 
+                        type: 'line', 
+                        data: (item.data || []).map(num => parseNumber(num)), 
+                        symbol: 'circle', 
+                        symbolSize: 5
+                    })) || []
+                };
+            }
+            orderStatusTrend.setOption(trendOption);
+        })
+        .catch(err => {
+            console.error('订单状态数据加载失败：', err);
+            orderStatusPie.setOption({
+                title: { text: '数据加载失败，请刷新重试', left: 'center', textStyle: { color: '#e53e3e' } },
+                tooltip: { trigger: 'item' },
+                legend: { data: [], orient: 'vertical', left: 10 },
+                series: [{ type: 'pie', radius: ['40%', '70%'], data: [] }]
+            });
+            orderStatusTrend.setOption({
+                title: { text: '数据加载失败，请刷新重试', left: 'center', textStyle: { color: '#e53e3e' } },
+                tooltip: { trigger: 'axis' },
+                legend: { data: [], top: 30 },
+                xAxis: { type: 'category', data: [] },
+                yAxis: { type: 'value', min: 0 },
+                series: []
+            });
+        });
+}
+
+// -------------------------- 秒杀转化数据加载（同步优化）--------------------------
+function loadSeckillData(timeRange = '7d') {
+    seckillFunnel.setOption({
+        title: { text: '加载中...', left: 'center' },
+        tooltip: { trigger: 'item' },
+        series: [{ type: 'funnel', data: [] }]
+    });
+
+    fetchNoCache(`/analytics/api/seckill/?time_range=${timeRange}`)
+        .then(res => {
+            if (!res.ok) throw new Error('接口请求失败');
+            return res.json();
+        })
+        .then(data => {
+            const timeText = timeRange === '1d' ? '今日' : timeRange === '7d' ? '近7天' : '近30天';
+            let funnelOption;
+
+            const totalSeckill = parseNumber(data.total_seckill || 0);
+            const paidSeckill = parseNumber(data.paid_seckill || 0);
+            const pendingSeckill = parseNumber(data.pending_seckill || 0);
+            const cancelledSeckill = parseNumber(data.cancelled_seckill || 0);
+            const conversionRate = totalSeckill > 0 ? (paidSeckill / totalSeckill * 100) : 0;
+
+            if (totalSeckill === 0) {
+                funnelOption = {
+                    title: { text: `暂无${timeText}秒杀数据`, left: 'center' },
+                    tooltip: { trigger: 'item' },
+                    series: [{
+                        type: 'funnel',
+                        left: '10%',
+                        top: 60,
+                        bottom: 60,
+                        width: '80%',
+                        data: [
+                            { name: '秒杀成功', value: 0 },
+                            { name: '待支付', value: 0 },
+                            { name: '支付成功', value: 0 },
+                            { name: '超时取消', value: 0 }
+                        ]
+                    }]
+                };
+            } else {
+                funnelOption = {
+                    title: {
+                        text: `秒杀转化核心指标（转化率：${toFixed2(conversionRate)}% | 平均支付时长：${toFixed2(data.avg_pay_duration || 0)}分钟）`,
+                        left: 'center'
+                    },
+                    tooltip: { trigger: 'item', formatter: '{b}: {c}单' },
+                    series: [{
+                        type: 'funnel',
+                        left: '10%',
+                        top: 60,
+                        bottom: 60,
+                        width: '80%',
+                        minSize: '0%',
+                        maxSize: '100%',
+                        sort: 'descending',
+                        gap: 2,
+                        label: { show: true, position: 'inside' },
+                        labelLine: { length: 10, lineStyle: { width: 1, type: 'solid' } },
+                        data: [
+                            { name: '秒杀成功', value: totalSeckill },
+                            { name: '待支付', value: pendingSeckill },
+                            { name: '支付成功', value: paidSeckill },
+                            { name: '超时取消', value: cancelledSeckill }
+                        ]
+                    }]
+                };
+            }
+            seckillFunnel.setOption(funnelOption);
+        })
+        .catch(err => {
+            console.error('秒杀数据加载失败：', err);
+            seckillFunnel.setOption({
+                title: { text: '数据加载失败，请刷新重试', left: 'center', textStyle: { color: '#e53e3e' } },
+                tooltip: { trigger: 'item' },
+                series: [{
+                    type: 'funnel',
+                    left: '10%',
+                    top: 60,
+                    bottom: 60,
+                    width: '80%',
+                    data: [
+                        { name: '秒杀成功', value: 0 },
+                        { name: '待支付', value: 0 },
+                        { name: '支付成功', value: 0 },
+                        { name: '超时取消', value: 0 }
+                    ]
+                }]
+            });
+        });
+}
+
+// -------------------------- 初始化加载所有数据 --------------------------
+loadSalesData();
+loadOrderStatusData();
+loadSeckillData();
+
+// -------------------------- 窗口自适应 --------------------------
+window.addEventListener('resize', function() {
+    salesChart.resize();
+    orderStatusPie.resize();
+    orderStatusTrend.resize();
+    seckillFunnel.resize();
+});
+</script>
+</body>
+</html>

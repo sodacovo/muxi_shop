@@ -1,0 +1,21 @@
+● muxi_shop_uwsgi.service - muxi_shop uwsgi
+   Loaded: loaded (/etc/systemd/system/muxi_shop_uwsgi.service; enabled; vendor preset: disabled)
+   Active: activating (start) since Sun 2025-10-12 10:27:23 CST; 31s ago
+Cntrl PID: 126975 (uwsgi)
+    Tasks: 4 (limit: 11715)
+   Memory: 38.3M
+   CGroup: /system.slice/muxi_shop_uwsgi.service
+           ├─126975 /www/wwwroot/muxi_django/venv/bin/uwsgi --ini uwsgi.ini
+           ├─126976 /www/wwwroot/muxi_django/venv/bin/uwsgi --ini uwsgi.ini
+           └─126977 /www/wwwroot/muxi_django/venv/bin/uwsgi --ini uwsgi.ini
+
+Oct 12 10:27:23 iZ7xv2crk07q0nytahottcZ uwsgi[126975]: your server socket listen backlog is limited to 100 connections
+Oct 12 10:27:23 iZ7xv2crk07q0nytahottcZ uwsgi[126975]: your mercy for graceful operations on workers is 60 seconds
+Oct 12 10:27:23 iZ7xv2crk07q0nytahottcZ uwsgi[126975]: mapped 166752 bytes (162 KB) for 2 cores
+Oct 12 10:27:23 iZ7xv2crk07q0nytahottcZ uwsgi[126975]: *** Operational MODE: threaded ***
+Oct 12 10:27:23 iZ7xv2crk07q0nytahottcZ uwsgi[126975]: WSGI app 0 (mountpoint='') ready in 0 seconds on interpreter 0xaec470 pid: 126975 (default app)
+Oct 12 10:27:23 iZ7xv2crk07q0nytahottcZ uwsgi[126975]: *** WARNING: you are running uWSGI as root !!! (use the --uid flag) ***
+Oct 12 10:27:23 iZ7xv2crk07q0nytahottcZ uwsgi[126975]: *** uWSGI is running in multiple interpreter mode ***
+Oct 12 10:27:23 iZ7xv2crk07q0nytahottcZ uwsgi[126975]: spawned uWSGI master process (pid: 126975)
+Oct 12 10:27:23 iZ7xv2crk07q0nytahottcZ uwsgi[126975]: spawned uWSGI worker 1 (pid: 126976, cores: 2)
+Oct 12 10:27:23 iZ7xv2crk07q0nytahottcZ uwsgi[126975]: spawned uWSGI http 1 (pid: 126977)
